@@ -1,371 +1,414 @@
 #include <iostream>
 #include <vector>
-#include <windows.h>
-#include <conio.h>
+#include <random>
 #include <ctime>
+#include <conio.h>
+#include <windows.h>
 
-const int TABLE_W = 20;
-const int TABLE_H = 20;
-const int DELAY_MS = 500; // Time delay in milliseconds for block auto-movement
+const int Board_W = 12;
+const int Board_H = 25;
+std::vector<std::vector<int>> matrix(Board_H, std::vector<int>(Board_W, 0));
 
-void CursorView(char show)
+void CursorView()
 {
-    HANDLE hConsole;
-    CONSOLE_CURSOR_INFO ConsoleCursor;
+    CONSOLE_CURSOR_INFO cursorInfo = { 0, };
+    cursorInfo.dwSize = 1;
+    cursorInfo.bVisible = FALSE;
 
-    hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-
-    ConsoleCursor.bVisible = show;
-    ConsoleCursor.dwSize = 1;
-
-    SetConsoleCursorInfo(hConsole, &ConsoleCursor);
+    SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
+}
+// 게임 보드
+void draw_GameBoard()
+{
+    for (int i = 0; i < Board_H; i++)
+    {
+        for (int j = 0; j < Board_W; j++)
+        {
+            if (i == Board_H - 1 || j == 0 || j == Board_W - 1)
+            {
+                matrix[i][j] = 1;
+            }
+            else
+            {
+                matrix[i][j] = 0;
+            }
+        }
+    }
 }
 
-void gotoxy(int x, int y)
+enum eKeyCode
 {
-    COORD pos = { (short)x, (short)y };
-    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), pos);
-}
-
-enum keyCode
-{
-    UP = 72,
-    DOWN = 80,
-    LEFT = 75,
-    RIGHT = 77,
-    SPACE = 32,
-    R = 114,
-    C = 99
+    KEY_UP = 72,
+    KEY_DOWN = 80,
+    KEY_LEFT = 75,
+    KEY_RIGHT = 77,
+    KEY_R = 114,
+    KEY_SPACE = 32,
+    KEY_H = 104,
 };
 
-const int BLOCKS[][4 * 4] =
+// 사용자 입력
+void input_User(int& blockPosX, int& blockPosY, bool& rotate, bool& drop)
 {
-    //I
-    {
-        0, 0, 0, 0,
-        2, 2, 2, 2,
-        0, 0, 0, 0,
-        0, 0, 0, 0
-    },
-    //J
-    {
-        0, 0, 0, 0,
-        0, 0, 2, 0,
-        0, 0, 2, 0,
-        0, 2, 2, 0
-    },
-    //L
-    {
-        0, 0, 0, 0,
-        0, 2, 0, 0,
-        0, 2, 0, 0,
-        0, 2, 2, 0
-    },
-    //O
-    {
-        0, 0, 0, 0,
-        0, 2, 2, 0,
-        0, 2, 2, 0,
-        0, 0, 0, 0
-    },
-    //S
-    {
-        0, 0, 0, 0,
-        0, 2, 2, 0,
-        2, 2, 0, 0,
-        0, 0, 0, 0
-    },
-    //T
-    {
-        0, 0, 0, 0,
-        0, 2, 2, 2,
-        0, 0, 2, 0,
-        0, 0, 0, 0
-    },
-    //Z
-    {
-        0, 0, 0, 0,
-        0, 2, 2, 0,
-        0, 0, 2, 2,
-        0, 0, 0, 0
-    },
-};
-
-const char BLOCK_TYPES[][4] =
-{
-    " ",
-    "■",
-    "□" };
-
-class GameTable
-{
-private:
-    int x;
-    int y;
-    std::vector<std::vector<int>> table;
-
-public:
-    GameTable(int x, int y)
-    {
-        this->x = x;
-        this->y = y;
-
-        for (int i = 0; i < y; i++)
-        {
-            std::vector<int> tmp;
-            for (int j = 0; j < x; j++)
-            {
-                tmp.push_back(0);
-            }
-            table.push_back(tmp);
-        }
-
-        for (int i = 0; i < x; i++)
-        {
-            table[0][i] = 1;
-            table[y - 1][i] = 1;
-        }
-        for (int i = 0; i < y; i++)
-        {
-            table[i][0] = 1;
-            table[i][x - 1] = 1;
-        }
-    }
-
-    void drawGameTable()
-    {
-        for (int i = 0; i < y; i++)
-        {
-            for (int j = 0; j < x; j++)
-            {
-                if (table[i][j] == 1)
-                {
-                    std::cout << "■";
-                }
-                else
-                {
-                    std::cout << " ";
-                }
-            }
-            std::cout << "\n";
-        }
-    }
-
-    bool isCollision(int x, int y) const
-    {
-        return table[y][x] != 0;
-    }
-};
-
-class Block
-{
-private:
-    int x, y;
-    int shape[4][4];
-
-public:
-    Block()
-    {
-        x = TABLE_W / 2;
-        y = 0;
-        generateRandomShape();
-    }
-
-    void generateRandomShape()
-    {
-        int shapeIndex = rand() % 7;
-        for (int i = 0; i < 4; ++i)
-        {
-            for (int j = 0; j < 4; ++j)
-            {
-                shape[i][j] = BLOCKS[shapeIndex][i * 4 + j];
-            }
-        }
-    }
-
-    void drawBlock(int x, int y, const Block& block)
-    {
-        for (int i = 0; i < 4; ++i)
-        {
-            for (int j = 0; j < 4; ++j)
-            {
-                if (block.getShape(i, j) != 0)
-                {
-                    gotoxy(x + j * 2, y + i);
-                    std::cout << BLOCK_TYPES[block.getShape(i, j)];
-                }
-            }
-        }
-    }
-
-    void rotate(const GameTable& gameTable)
-    {
-        int temp[4][4];
-        for (int i = 0; i < 4; ++i)
-        {
-            for (int j = 0; j < 4; ++j)
-            {
-                temp[i][j] = shape[i][j];
-            }
-        }
-
-        // Rotate the block
-        for (int i = 0; i < 4; ++i)
-        {
-            for (int j = 0; j < 4; ++j)
-            {
-                shape[i][j] = temp[3 - j][i];
-            }
-        }
-
-        // Check if rotation causes collision
-        for (int i = 0; i < 4; ++i)
-        {
-            for (int j = 0; j < 4; ++j)
-            {
-                if (shape[i][j] != 0 && (getX() + j < 1 || getX() + j >= TABLE_W - 1 || gameTable.isCollision(getX() + j, getY() + i)))
-                {
-                    for (int k = 0; k < 4; ++k)
-                    {
-                        for (int l = 0; l < 4; ++l)
-                        {
-                            shape[k][l] = temp[k][l];
-                        }
-                    }
-                    return;
-                }
-            }
-        }
-    }
-
-    void moveDown(const GameTable& gameTable)
-    {
-        // Check if the block can move down without colliding
-        for (int i = 0; i < 4; ++i)
-        {
-            for (int j = 0; j < 4; ++j)
-            {
-                if (shape[i][j] != 0 && (getY() + i + 1 >= TABLE_H - 1 || gameTable.isCollision(getX() + j, getY() + i + 1)))
-                    return;
-            }
-        }
-        ++y;
-    }
-
-    void moveLeft(const GameTable& gameTable)
-    {
-        // Check if the block can move left without colliding
-        for (int i = 0; i < 4; ++i)
-        {
-            for (int j = 0; j < 4; ++j)
-            {
-                if (shape[i][j] != 0 && (getX() + j - 1 <= 0 || gameTable.isCollision(getX() + j - 1, getY() + i)))
-                    return;
-            }
-        }
-        --x;
-    }
-
-    void moveRight(const GameTable& gameTable)
-    {
-        // Check if the block can move right without colliding
-        for (int i = 0; i < 4; ++i)
-        {
-            for (int j = 0; j < 4; ++j)
-            {
-                if (shape[i][j] != 0 && (getX() + j + 1 >= TABLE_W - 1 || gameTable.isCollision(getX() + j + 1, getY() + i)))
-                    return;
-            }
-        }
-        ++x;
-    }
-
-    int getX() const
-    {
-        return x;
-    }
-
-    int getY() const
-    {
-        return y;
-    }
-
-    int getShape(int i, int j) const
-    {
-        return shape[i][j];
-    }
-};
-
-void InputKey(Block& block, GameTable& gameTable)
-{
-    int k = 0;
+    int nKey = 0;
 
     if (_kbhit() > 0)
     {
-        k = _getch();
+        nKey = _getch();
 
-        switch (k)
+        switch (nKey)
         {
-            case keyCode::UP:
+        case eKeyCode::KEY_UP:
+            break;
+        case eKeyCode::KEY_DOWN:
+            blockPosY++;
+            break;
+        case eKeyCode::KEY_LEFT:
+            blockPosX--;
+            break;
+        case eKeyCode::KEY_RIGHT:
+            blockPosX++;
+            break;
+        case eKeyCode::KEY_R:
+            rotate = true;
+            break;
+        case eKeyCode::KEY_SPACE:
+            drop = true;
+            break;
+        case eKeyCode::KEY_H:
+            //hold = true;
+            break;
+        }
+    }
+}
+
+// 블럭들
+std::vector<std::vector<int>> Blocks(int num)
+{
+    std::vector<std::vector<int>> I;
+    I = { {0, 0, 0, 0}, {0, 0, 0, 0}, {2, 2, 2, 2}, {0, 0, 0, 0} };
+
+    std::vector<std::vector<int>> T;
+    T = { {0, 0, 0, 0}, {0, 0, 2, 0}, {0, 2, 2, 2}, {0, 0, 0, 0} };
+
+    std::vector<std::vector<int>> L;
+    L = { {0, 2, 0, 0}, {0, 2, 0, 0}, {0, 2, 2, 0}, {0, 0, 0, 0} };
+
+    std::vector<std::vector<int>> J;
+    J = { {0, 0, 2, 0}, {0, 0, 2, 0}, {0, 2, 2, 0}, {0, 0, 0, 0} };
+
+    std::vector<std::vector<int>> Z;
+    Z = { {0, 0, 0, 0}, {0, 2, 2, 0}, {0, 0, 2, 2}, {0, 0, 0, 0} };
+
+    std::vector<std::vector<int>> S;
+    S = { {0, 0, 0, 0}, {0, 0, 2, 2}, {0, 2, 2, 0}, {0, 0, 0, 0} };
+
+    std::vector<std::vector<int>> O;
+    O = { {0, 0, 0, 0}, {0, 2, 2, 0}, {0, 2, 2, 0}, {0, 0, 0, 0} };
+
+    switch (num)
+    {
+    case 1:
+        return I;
+    case 2:
+        return T;
+    case 3:
+        return L;
+    case 4:
+        return J;
+    case 5:
+        return Z;
+    case 6:
+        return S;
+    case 7:
+        return O;
+    }
+}
+
+// 블럭들 회전
+std::vector<std::vector<int>> rotate_Block(std::vector<std::vector<int>> block)
+{
+    int n = block.size();
+    std::vector<std::vector<int>> rotated(n, std::vector<int>(n, 0));
+    for (int i = 0; i < n; i++)
+    {
+        for (int j = 0; j < n; j++)
+        {
+            rotated[j][n - 1 - i] = block[i][j];
+        }
+    }
+    return rotated;
+}
+
+// 블럭 충돌 검사
+bool check_Collision(const std::vector<std::vector<int>>& board, const std::vector<std::vector<int>>& block, int posX, int posY)
+{
+    for (int i = 0; i < block.size(); i++)
+    {
+        for (int j = 0; j < block[i].size(); j++)
+        {
+            if (block[i][j] == 2)
             {
-                GameTable gt(TABLE_W, TABLE_H);
-                block.rotate(gt);
-                break;
-            }
-            case keyCode::DOWN:
-            {
-                GameTable gt(TABLE_W, TABLE_H);
-                block.moveDown(gt);
-                break;
-            }
-            case keyCode::RIGHT:
-            {
-                GameTable gt(TABLE_W, TABLE_H);
-                block.moveRight(gt);
-                break;
-            }
-            case keyCode::LEFT:
-            {
-                GameTable gt(TABLE_W, TABLE_H);
-                block.moveLeft(gt);
-                break;
-            }
-            // Drop block instantly
-            case keyCode::SPACE:
-            {
-                break;
-            }
-            //Hold
-            case keyCode::C:
-            {
-                break;
+                int newX = posX + j;
+                int newY = posY + i;
+
+                // 보드 경계를 넘거나 다른 블럭과 충돌하는지 확인
+                if (newX < 0 || newX >= Board_W || newY < 0 || newY >= Board_H || board[newY][newX] == 2 || board[newY][newX] == 1)
+                {
+                    return true;
+                }
             }
         }
     }
-
+    return false;
 }
 
-int main()
+// 라인 삭제
+int clear_FullLines(std::vector<std::vector<int>>& board)
 {
-    srand(time(NULL));
+    int linesCleared = 0;
+    for (int i = Board_H - 2; i > 0; --i) // 맨 아래부터 검사 (맨 아랫줄은 체크하지 않음)
+    {
+        bool fullLine = true;
+        for (int j = 1; j < Board_W - 1; ++j) // 양쪽 벽은 체크하지 않음
+        {
+            if (board[i][j] == 0)
+            {
+                fullLine = false;
+                break;
+            }
+        }
+        if (fullLine)
+        {
+            // 가득 찬 행을 삭제하고 한 줄씩 아래로 내리기
+            for (int k = i; k > 0; --k)
+            {
+                for (int j = 1; j < Board_W - 1; ++j)
+                {
+                    board[k][j] = board[k - 1][j];
+                }
+            }
+            // 맨 윗 줄은 빈 줄로 채우기
+            for (int j = 1; j < Board_W - 1; ++j)
+            {
+                board[0][j] = 0;
+            }
+            linesCleared++;
+            // 다시 같은 위치부터 검사하기 위해 i를 한 칸 올림
+            i++;
+        }
+    }
 
-    GameTable gt(TABLE_W, TABLE_H);
-    Block block;
+    return linesCleared;
+}
 
-    CursorView(false);
+// 라인 삭제 후 점수 획득
+void fix_Block_And_ClearLines(std::vector<std::vector<int>>& board, const std::vector<std::vector<int>>& block, int posX, int posY, int& score)
+{
+    for (int i = 0; i < block.size(); ++i)
+    {
+        for (int j = 0; j < block[i].size(); ++j)
+        {
+            if (block[i][j] == 2)
+            {
+                board[posY + i][posX + j] = 2;
+            }
+        }
+    }
+    // 삭제된 라인 수에 따라 점수 획득
+    int linesCleared = clear_FullLines(board);
+    score += linesCleared * 100;
+}
+
+// 블럭을 보드에 출력하도록
+void draw_BlockOnBoard(std::vector<std::vector<int>>& board, const std::vector<std::vector<int>>& block, int posX, int posY)
+{
+    for (int i = 0; i < block.size(); i++)
+    {
+        for (int j = 0; j < block[i].size(); j++)
+        {
+            if (block[i][j] == 2)
+            {
+                board[posY + i][posX + j] = 2;
+            }
+        }
+    }
+}
+
+// 게임 보드 출력
+void print_Board(const std::vector<std::vector<int>>& board, const std::vector<std::vector<int>>& nextBlock)
+{
+    // 현재 보드의 너비와 높이
+    int boardWidth = Board_W;
+    int boardHeight = Board_H;
+
+    // 다음 블럭의 너비와 높이
+    int nextBlockWidth = nextBlock[0].size();
+    int nextBlockHeight = nextBlock.size();
+
+    // 게임 보드와 다음 블럭을 출력
+    for (int i = 0; i < boardHeight; i++)
+    {
+        // 현재 보드 출력
+        for (int j = 0; j < boardWidth; j++)
+        {
+            if (board[i][j] == 1)
+            {
+                std::cout << "■ ";
+            }
+            else if (board[i][j] == 2)
+            {
+                std::cout << "□ ";
+            }
+            else
+            {
+                std::cout << "  ";
+            }
+        }
+
+        // 다음 블럭 출력 (보드 옆에)
+        if (i == 0)
+        {
+            std::cout << " ▣ ▣ ▣ ▣ ▣ ▣ ";
+        }
+        else if (i < nextBlockHeight + 1)
+        {
+            std::cout << " ▣ ";
+            for (int j = 0; j < nextBlockWidth; j++)
+            {
+                if (nextBlock[i - 1][j] == 2)
+                {
+                    std::cout << "□ ";
+                }
+                else
+                {
+                    std::cout << "  ";
+                }
+            }
+            std::cout << "▣ ";
+        }
+        else if (i == nextBlockHeight + 1)
+        {
+            std::cout << " ▣ ▣ ▣ ▣ ▣ ▣ ";
+        }
+
+        std::cout << "\n";
+    }
+}
+
+// 게임 오버 여부를 확인하는 함수
+bool check_GameOver(const std::vector<std::vector<int>>& board)
+{
+    // 보드 출력 영역의 높이를 고려하여 첫 번째 줄을 확인
+    for (int j = 1; j < Board_W - 1; ++j)
+    {
+        if (board[3][j] == 2) // 보드 출력 영역의 첫 번째 줄을 기준으로 수정
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+int main(void)
+{
+    CursorView();
+    draw_GameBoard();
+    std::vector<std::vector<int>> currentBlock = Blocks(1);
+    //다음 블럭 미리 설정
+    std::vector<std::vector<int>> nextBlock = Blocks(rand() % 7 + 1);
+    int blockPosX = 5;
+    int blockPosY = 0;
+
+    clock_t lastUpdateTime = clock();
+
+    // 블럭이 하강하는 간격 (초 단위)
+    double delay = 1.0;
+    int score = 0;
 
     while (true)
     {
-        InputKey(block, gt);
+        // 현재 시간 가져오기
+        clock_t currentTime = clock();
+        double elapsedTime = double(currentTime - lastUpdateTime) / CLOCKS_PER_SEC;
 
-        // Move the block down automatically
-        //block.moveDown(gt);
+        // 일정 시간 간격으로 블럭 하강
+        if (elapsedTime >= delay)
+        {
+            if (!check_Collision(matrix, currentBlock, blockPosX, blockPosY + 1))
+            {
+                blockPosY++;
+            }
+            else
+            {
+                // 블럭이 더 이상 아래로 이동할 수 없을 때 고정시키고 새로운 블럭 생성
+                fix_Block_And_ClearLines(matrix, currentBlock, blockPosX, blockPosY, score);
+                currentBlock = nextBlock;
+                nextBlock = Blocks(rand() % 7 + 1);
+                blockPosX = 5;
+                blockPosY = 0;
+            }
+            lastUpdateTime = currentTime;
+        }
 
-        system("cls");
+        // 사용자 입력 처리
+        int tempPosX = blockPosX;
+        int tempPosY = blockPosY;
+        bool rotate = false;
+        bool drop = false;
+        input_User(tempPosX, tempPosY, rotate, drop);
 
-        gt.drawGameTable();
+        // 회전 처리
+        if (rotate)
+        {
+            std::vector<std::vector<int>> rotatedBlock = rotate_Block(currentBlock);
+            if (!check_Collision(matrix, rotatedBlock, blockPosX, blockPosY))
+            {
+                currentBlock = rotatedBlock;
+            }
+        }
 
-        block.drawBlock(block.getX(), block.getY(), block);
+        // 드롭 처리
+        if (drop)
+        {
+            while (!check_Collision(matrix, currentBlock, blockPosX, blockPosY + 1))
+            {
+                blockPosY++;
+            }
+            fix_Block_And_ClearLines(matrix, currentBlock, blockPosX, blockPosY, score);
+            currentBlock = nextBlock;
+            nextBlock = Blocks(rand() % 7 + 1);
+            tempPosX = 5;
+            tempPosY = 0;
+        }
+
+        // 충돌 검사
+        if (!check_Collision(matrix, currentBlock, tempPosX, tempPosY))
+        {
+            blockPosX = tempPosX;
+            blockPosY = tempPosY;
+        }
+
+        // 보드를 초기화하고 블럭을 보드에 그리기
+        std::vector<std::vector<int>> tempBoard = matrix;
+        std::cout << blockPosX << blockPosY << "\n";
+        draw_BlockOnBoard(tempBoard, currentBlock, blockPosX, blockPosY);
+
+        // 보드 출력
+        system("cls"); // 화면 지우기 (Windows)
+        print_Board(tempBoard, nextBlock);
+
+        // 보드 출력 (이전 코드와 동일)
+        std::cout << "Score: " << score << std::endl;
+
+        // 게임 오버 여부 확인
+        if (check_GameOver(matrix))
+        {
+            system("cls"); // 화면 지우기 (Windows)
+            std::cout << "Game Over!" << std::endl;
+            std::cout << "Your Score: " << score << std::endl;
+            break; // 게임 종료
+        }
     }
 
     return 0;
