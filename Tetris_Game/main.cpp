@@ -17,6 +17,15 @@ void CursorView()
 
     SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
 }
+
+void clear_Screen()
+{
+    COORD cursorPosition;
+    cursorPosition.X = 0;
+    cursorPosition.Y = 0;
+    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), cursorPosition);
+}
+
 // 게임 보드
 void draw_GameBoard()
 {
@@ -220,8 +229,8 @@ void fix_Block_And_ClearLines(std::vector<std::vector<int>>& board, const std::v
     score += linesCleared * 100;
 }
 
-// 블럭을 보드에 출력하도록
-void draw_BlockOnBoard(std::vector<std::vector<int>>& board, const std::vector<std::vector<int>>& block, int posX, int posY)
+// 블록을 보드에 표시할 때 현재 위치와 미리 계산된 위치를 다르게 표시하는 함수
+void draw_BlockOnBoardWithShadow(std::vector<std::vector<int>>& board, const std::vector<std::vector<int>>& block, int posX, int posY, int shadowPosY)
 {
     for (int i = 0; i < block.size(); i++)
     {
@@ -229,7 +238,14 @@ void draw_BlockOnBoard(std::vector<std::vector<int>>& board, const std::vector<s
         {
             if (block[i][j] == 2)
             {
+                // 현재 위치에 블록을 표시
                 board[posY + i][posX + j] = 2;
+
+                // 미리 계산된 위치에 다른 모양의 블록을 표시
+                if (shadowPosY + i < Board_H - 1) // 보드의 하단을 넘지 않도록
+                {
+                    board[shadowPosY + i][posX + j] = 3;
+                }
             }
         }
     }
@@ -259,6 +275,10 @@ void print_Board(const std::vector<std::vector<int>>& board, const std::vector<s
             else if (board[i][j] == 2)
             {
                 std::cout << "□ ";
+            }
+            else if (board[i][j] == 3)
+            {
+                std::cout << "▩ ";
             }
             else
             {
@@ -308,6 +328,17 @@ bool check_GameOver(const std::vector<std::vector<int>>& board)
         }
     }
     return false;
+}
+
+// 블록이 어디까지 이동할 수 있는지를 반환하는 함수
+int calculate_FallDistance(const std::vector<std::vector<int>>& board, const std::vector<std::vector<int>>& block, int posX, int posY)
+{
+    int distance = 0;
+    while (!check_Collision(board, block, posX, posY + distance + 1)) // 아래로 이동할 수 있는 거리를 계산
+    {
+        distance++;
+    }
+    return distance;
 }
 
 int main(void)
@@ -389,13 +420,15 @@ int main(void)
             blockPosY = tempPosY;
         }
 
+        // 블록이 어디까지 이동할 수 있는지를 계산하여 표시
+        int fallDistance = calculate_FallDistance(matrix, currentBlock, blockPosX, blockPosY);
+
         // 보드를 초기화하고 블럭을 보드에 그리기
         std::vector<std::vector<int>> tempBoard = matrix;
-        std::cout << blockPosX << blockPosY << "\n";
-        draw_BlockOnBoard(tempBoard, currentBlock, blockPosX, blockPosY);
+        draw_BlockOnBoardWithShadow(tempBoard, currentBlock, blockPosX, blockPosY, blockPosY + fallDistance);
 
         // 보드 출력
-        system("cls"); // 화면 지우기 (Windows)
+        clear_Screen();
         print_Board(tempBoard, nextBlock);
 
         // 보드 출력 (이전 코드와 동일)
@@ -404,7 +437,7 @@ int main(void)
         // 게임 오버 여부 확인
         if (check_GameOver(matrix))
         {
-            system("cls"); // 화면 지우기 (Windows)
+            system("cls");
             std::cout << "Game Over!" << std::endl;
             std::cout << "Your Score: " << score << std::endl;
             break; // 게임 종료
